@@ -13,7 +13,7 @@ IST = pytz.timezone("Asia/Kolkata")
 UTC = pytz.utc
 
 # ================= DB =================
-MONGO_URI = st.secrets["mongo"]["uri"]
+MONGO_URI = st.secrets["mongo"]
 client = MongoClient(MONGO_URI)
 db = client["glucose_db"]
 col = db.glucose_logs
