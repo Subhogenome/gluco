@@ -5,35 +5,24 @@ from datetime import datetime
 import plotly.graph_objects as go
 import pytz
 
-# ================= TIMEZONE =================
-IST = pytz.timezone("Asia/Kolkata")
-UTC = pytz.utc
-
-def ist_now():
-    return datetime.now(IST)
-
-def ist_datetime_from_time(t):
-    today = ist_now().date()
-    ist_dt = IST.localize(datetime.combine(today, t))
-    return ist_dt
-
-def utc_to_ist(dt):
-    return dt.astimezone(IST)
-
 # ================= CONFIG =================
 st.set_page_config(page_title="Glucose Tracker", layout="centered")
 st.title("🩸 Glucose Tracker")
 
-MONGO_URI = st.secrets["mongo"]
-client = MongoClient(MONGO_URI)
-db = client["health"]
-glucose_col = db.glucose_logs
+IST = pytz.timezone("Asia/Kolkata")
+UTC = pytz.utc
 
-# ================= CLASSIFICATION =================
-def classify_glucose(value):
-    if value < 70:
+# ================= DB =================
+MONGO_URI = st.secrets["mongo"]["uri"]
+client = MongoClient(MONGO_URI)
+db = client["glucose_db"]
+col = db.glucose_logs
+
+# ================= HELPERS =================
+def classify_glucose(v):
+    if v < 70:
         return "Hypoglycemia"
-    elif value <= 140:
+    elif v <= 140:
         return "Normal"
     else:
         return "Hyperglycemia"
@@ -41,45 +30,46 @@ def classify_glucose(value):
 # ================= INPUT =================
 with st.form("glucose_form"):
     glucose = st.number_input(
-        "Glucose Level (mg/dL)",
+        "Glucose (mg/dL)",
         min_value=20,
         max_value=600,
         step=1
     )
 
-    log_time = st.time_input(
-        "Time (optional – defaults to current IST)",
-        value=None
-    )
+    log_date = st.date_input("Date (IST)")
+    log_time = st.time_input("Time (IST)")
 
     submit = st.form_submit_button("➕ Add Reading")
 
     if submit:
-        ist_timestamp = (
-            ist_datetime_from_time(log_time)
-            if log_time else ist_now()
-        )
+        # USER MUST PROVIDE TIMESTAMP (NO DEFAULTS)
+        ist_dt = IST.localize(datetime.combine(log_date, log_time))
+        utc_dt = ist_dt.astimezone(UTC)
 
-        glucose_col.insert_one({
+        col.insert_one({
             "glucose": glucose,
             "status": classify_glucose(glucose),
-            "time_utc": ist_timestamp.astimezone(UTC)
+            "time_utc": utc_dt
         })
 
         st.success(
             f"Logged {glucose} mg/dL at "
-            f"{ist_timestamp.strftime('%d %b %Y %I:%M %p IST')}"
+            f"{ist_dt.strftime('%d %b %Y %I:%M %p IST')}"
         )
 
-# ================= FETCH DATA =================
-data = list(glucose_col.find({}, {"_id": 0}))
+# ================= FETCH =================
+data = list(col.find({}, {"_id": 0}))
 
 if not data:
-    st.info("No glucose readings yet. Add one above 👆")
+    st.info("No glucose readings yet.")
     st.stop()
 
 df = pd.DataFrame(data)
-df["time"] = df["time_utc"].apply(utc_to_ist)
+
+# 🔑 CRITICAL LINE (FIXES YOUR ERROR)
+df["time"] = pd.to_datetime(df["time_utc"], utc=True)\
+                .dt.tz_convert("Asia/Kolkata")
+
 df = df.sort_values("time")
 
 # ================= TABLE =================
@@ -89,7 +79,7 @@ st.dataframe(
     use_container_width=True
 )
 
-# ================= PLOTLY GRAPH =================
+# ================= GRAPH =================
 st.subheader("📈 Glucose Trend (IST)")
 
 fig = go.Figure()
@@ -98,7 +88,6 @@ fig.add_trace(go.Scatter(
     x=df["time"],
     y=df["glucose"],
     mode="lines+markers",
-    name="Glucose",
     hovertemplate="Time: %{x}<br>Glucose: %{y} mg/dL<extra></extra>"
 ))
 
@@ -120,7 +109,7 @@ fig.update_layout(
 
 st.plotly_chart(fig, use_container_width=True)
 
-# ================= LATEST READING =================
+# ================= LATEST =================
 latest = df.iloc[-1]
 
 st.markdown(f"""
