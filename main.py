@@ -17,7 +17,7 @@ IST = pytz.timezone("Asia/Kolkata")
 # ---------------------------------
 # MongoDB Connection
 # ---------------------------------
-MONGO_URI = st.secrets.get("MONGO_URI") or os.getenv("MONGO_URI")
+MONGO_URI = st.secrets["MONGO_URI"]
 client = MongoClient(MONGO_URI)
 db = client["glucose_db"]
 collection = db["readings"]
