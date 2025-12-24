@@ -24,7 +24,7 @@ def utc_to_ist(dt):
 st.set_page_config(page_title="Glucose Tracker", layout="centered")
 st.title("🩸 Glucose Tracker")
 
-MONGO_URI = st.secrets["mongo"]["uri"]
+MONGO_URI = st.secrets["mongo"]
 client = MongoClient(MONGO_URI)
 db = client["health"]
 glucose_col = db.glucose_logs
